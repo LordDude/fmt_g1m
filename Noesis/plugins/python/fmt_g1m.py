@@ -2378,10 +2378,11 @@ def LoadModel(data, mdlList):
 				for k in range(4):
 					finalTangentBuffer += noePack(endianC + 'f', vertex[k])
 		# colors
-		# for v in range(mesh.vertCount):
-		# vertex = mesh.colorBuffer[v]
-		# for k in range(4):
-		# finalColorBuffer+=noePack(endianC + 'f',vertex[k])
+		if (len(mesh.colorBuffer) != 0):
+			for v in range(mesh.vertCount):
+				vertex = mesh.colorBuffer[v]
+				for k in range(4):
+					finalColorBuffer+=noePack(endianC + 'f',vertex[k])
 		
 		# Weights
 		if (len(boneList) > 0):
@@ -2407,7 +2408,7 @@ def LoadModel(data, mdlList):
 		rapi.rpgBindPositionBuffer(finalVertexPosBuffer, noesis.RPGEODATA_FLOAT, 12)
 		rapi.rpgBindUV1Buffer(finalVertexUVBuffer, noesis.RPGEODATA_FLOAT, 8)
 		rapi.rpgBindNormalBuffer(finalVertexNormBuffer, noesis.RPGEODATA_FLOAT, 12)
-		# rapi.rpgBindColorBuffer(finalColorBuffer, noesis.RPGEODATA_FLOAT,16,4)
+		rapi.rpgBindColorBuffer(finalColorBuffer, noesis.RPGEODATA_FLOAT,16,4)
 		# if(len(mesh.tangentBuffer)>0):
 		# rapi.rpgBindTangentBuffer(finalTangentBuffer,noesis.RPGEODATA_FLOAT,16)
 		
