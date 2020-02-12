@@ -2414,7 +2414,7 @@ def LoadModel(data, mdlList):
 
 		for j, mat in enumerate(mesh.matList):
 			meshName = 'submesh_' + str(currentMesh)
-			material = NoeMaterial(meshName, "")
+			material = NoeMaterial(meshName+"_MAT", "")
 			if len(textureList) > 0:
 				if diffID > -1:
 					print("Found Diffuse Texture %s" % (mat.diffuse))
@@ -2424,7 +2424,7 @@ def LoadModel(data, mdlList):
 					material.setNormalTexture(mat.normal)
 			else:
 				matName = mat.diffuse
-			rapi.rpgSetMaterial(meshName)
+			rapi.rpgSetMaterial(meshName+"_MAT")
 			rapi.rpgSetName(meshName)
 			matList.append(material)
 			if (currentMesh >= submeshesCount):
