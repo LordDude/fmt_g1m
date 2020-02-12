@@ -1,4 +1,5 @@
 from inc_noesis import *
+from inc_etc import ETC2Decoder
 import os
 import subprocess
 from math import sqrt, sin, cos
@@ -825,6 +826,8 @@ def processG1T(bs):
 		elif (textureFormat == 0x56):
 			format = "ETC1"
 			computedSize = width * height // 2
+		elif (textureFormat == 0x57):
+			format = "ASTC_8_8"
 		elif (textureFormat == 0x59):
 			format = noesis.NOESISTEX_DXT1
 		elif (textureFormat == 0x5B):
@@ -839,8 +842,13 @@ def processG1T(bs):
 			format = noesis.FOURCC_BC7
 		elif (textureFormat == 0x60):
 			format = noesis.NOESISTEX_DXT1
+			mortonWidth = 4
 		elif (textureFormat == 0x62):
 			format = noesis.NOESISTEX_DXT5
+			mortonWidth = 8
+		elif (textureFormat == 0x65):
+			format = noesis.FOURCC_BC6H
+			mortonWidth = 8
 		elif (textureFormat == 0x6F):
 			format = "ETC1"
 			computedSize = width * height
@@ -859,57 +867,40 @@ def processG1T(bs):
 			else:
 				textureData = bs.readBytes(bs.dataSize - offsetList[i] - headerSize - tableoffset)	
 				datasize = bs.dataSize - offsetList[i] - headerSize - tableoffset
-		print("Loaded Texture %d of %d; %dx%d; Format %X; Size %X; System %X" % (i + 1, textureCount, width, height, textureFormat, len(textureData), platform))
+		print("Loaded Texture %d of %d; %dx%d; Format %X; Size %X; System %X; Mips %d" % (i + 1, textureCount, width, height, textureFormat, len(textureData), platform, mipMapNumber))
 		if platform == 2:
 			textureData = rapi.swapEndianArray(textureData, 2)
-		if format == "ETC1":
-			pvrTex = (b'\x50\x56\x52\x03\x02\x00\x00\x00')
-			pvrTex += struct.pack("I", 0x6)            
-			pvrTex += (b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')            
-			pvrTex += struct.pack("I", width)
-			pvrTex += struct.pack("I", height)
-			pvrTex += (b'\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00')
-			pvrTex += textureData	
-			dstFilePath = noesis.getScenesPath() + "ktgl_etctex.pvr"
-			workingdir = noesis.getScenesPath()
-			newfile = open(dstFilePath, 'wb')
-			newfile.write(pvrTex)
-			newfile.close()
-			subprocess.Popen([noesis.getScenesPath() + 'PVR2PNG.bat', dstFilePath]).wait()
-			textureData = rapi.loadIntoByteArray(dstFilePath + ".png")
-			texture = rapi.loadTexByHandler(textureData, ".png")
-			texture.name = textureName
-			textureList.append(texture)
-			continue			
-		if platform == 0x0B: #PS4
-			if format == noesis.NOESISTEX_DXT1:
-				imgFmt = b'\x30\x92'
-			elif format == noesis.NOESISTEX_DXT5:
-				imgFmt = b'\x50\x92'
-			gnfSize = datasize + 0x30
-			width = width-1 + 0xC000
-			height = ((height - 1) >> 2) + 0x7000
-			gnfHeader = b'\x47\x4E\x46\x20\x28\x00\x00\x00\x02\x01\x00\x00'
-			gnfHeader += bytearray(noePack("I", gnfSize))      
-			gnfHeader += b'\x00\x00\x00\x00\x01\x00'
-			gnfHeader += imgFmt                                
-			gnfHeader += bytearray(noePack("H", width))    
-			gnfHeader += bytearray(noePack("H", height))    
-			gnfHeader += b'\xAC\x0F\xD0\xA4\x01\xE0\x7F\x00\x00\x00\x00\x00\x00\00\x00\x00'
-			gnfHeader += bytearray(noePack("I", datasize))     
-			gnfHeader += textureData     
-			tex = rapi.loadTexByHandler(gnfHeader, ".gnf")
-			textureList.append(tex)
-			continue
-		
 		bRaw = type(format) == str
-		if texSys == 0 and mortonWidth > 0: print("MipSys is %d, but morton width is defined as %d-- Morton maybe not necessary!" % (texSys, mortonWidth))
+		if bRaw and format.startswith("ETC"):
+			if format == "ETC1":
+				etcFormat = ETC2Decoder.ETC_RGB4
+				format = "r8 g8 b8"
+			elif format == "ETC2_A1":
+				etcFormat = ETC2Decoder.ETC2_RGBA1
+				format = "r8 g8 b8 a8"
+			elif format == "ETC2_A8":
+				etcFormat = ETC2Decoder.ETC2_RGBA8
+				format = "r8 g8 b8 a8"
+			else:
+				etcFormat = ETC2Decoder.ETC2_RGB
+				format = "r8 g8 b8"
+			textureData = ETC2Decoder().decode(textureData, etcFormat, width, height)
+		elif format.startswith("ASTC"):
+			dims = list(map(lambda x: int(x), format.split('_')[1:]))
+			textureData = rapi.callExtensionMethod("astc_decoderaw32", textureData, dims[0], dims[1], 1, width, height, 1)
+			format = "r8 g8 b8 a8"
+		if texSys == 0 and mortonWidth > 0 and platform != 0xB: print("MipSys is %d, but morton width is defined as %d-- Morton maybe not necessary!" % (texSys, mortonWidth))
 		if mortonWidth > 0:
 			if platform == 2:
 				if bRaw:
 					textureData = rapi.imageUntile360Raw(textureData, width, height, mortonWidth)
 				else:
 					textureData = rapi.imageUntile360DXT(textureData, width, height, mortonWidth * 2)
+			if platform == 0x0B:
+				if bRaw:
+					textureData = rapi.callExtensionMethod("untile_1dthin", textureData, width, height, mortonWidth, 0)
+				else:
+					textureData = rapi.callExtensionMethod("untile_1dthin", textureData, width, height, mortonWidth, 1)
 			else:
 				textureData = rapi.imageFromMortonOrder(textureData, width >> 1, height >> 2, mortonWidth)
 		if bRaw:
