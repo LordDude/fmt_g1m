@@ -19,9 +19,9 @@ bDisplayDrivers = True	# Discard cloth drivers and physics' bones or not
 
 #paired files options
 bLoadG1T = True			# Allow to choose a paired .g1t file
-bLoadG1MS = False			# Allow to choose a paired .g1m skeleton file. Only choose this option if the skeleton is in a separate g1m
+bLoadG1MS = True			# Allow to choose a paired .g1m skeleton file. Only choose this option if the skeleton is in a separate g1m
 bLoadG1MOid = False			# Allow to choose a paired Oid.bin skeleton bone names file.
-bAutoLoadG1MS = True		# Load the first g1m in the same folder as skeleton
+bAutoLoadG1MS = False		# Load the first g1m in the same folder as skeleton
 bLoadG1AG2A = False	 		# Allow to choose a paired .g1a/.g2a file
 bLoadG1AG2AFolder = True	# Allow to choose a folder, all .g1a/.g2a files in this folder will be loaded
 bLoadG1H = False			#Allow to choose a paired .g1h file
@@ -586,16 +586,16 @@ class NUNOType0303Struct:
 def parseNUNOSection0301(chunkVersion, bs):
 	nunotype0301 = NUNOType0303Struct()
 	nunotype0301.name = "nuno"
-	bs.read('i')
+	a = bs.readUShort()
+	b = bs.readUShort()
+	nunotype0301.parentBoneID = a if endian == NOE_LITTLEENDIAN else b
 	controlPointCount = bs.readUInt()
 	unknownSectionCount = bs.readUInt()
-	unknown1 = bs.readInt()
-	unknown2 = bs.readInt()
-	unknown3 = bs.readInt()
-	bs.read('2i')
-	nunotype0301.parentBoneID = bs.readInt()
+	skip1 = bs.readInt()
+	skip2 = bs.readInt()
+	skip3 = bs.readInt()
 
-	bs.readBytes(0x40)
+	bs.readBytes(0x4C)
 	if (chunkVersion >= 0x30303235):
 		bs.readBytes(0x10)
 
@@ -613,9 +613,9 @@ def parseNUNOSection0301(chunkVersion, bs):
 		nunotype0301.influences.append(influence)
 
 	bs.readBytes(48 * unknownSectionCount)
-	bs.readBytes(4 * unknown1)
-	bs.readBytes(4 * unknown2)
-	bs.readBytes(4 * unknown3)
+	bs.readBytes(4 * skip1)
+	bs.readBytes(4 * skip2)
+	bs.readBytes(4 * skip3)
 
 	NUNO0303StructList.append(nunotype0301)
 
@@ -635,13 +635,16 @@ def parseNUNOSection0302(chunkVersion, bs):
 def parseNUNOSection0303(chunkVersion, bs):
 	nunotype0303 = NUNOType0303Struct()
 	nunotype0303.name = "nuno"
-	bs.read('i')
+	a = bs.readUShort()
+	b = bs.readUShort()
+	nunotype0303.parentBoneID = a if endian == NOE_LITTLEENDIAN else b
 	controlPointCount = bs.readUInt()
 	unknownSectionCount = bs.readUInt()
-	unknown1 = bs.readInt()
-	nunotype0303.parentBoneID = bs.readInt()
-	unknown2 = bs.readInt()
-	bs.readBytes(0xB0)
+	skip1 = bs.readInt()
+	bs.read('i')
+	skip2 = bs.readInt()
+	skip3 = bs.readInt()
+	bs.readBytes(0xAC)
 	if (chunkVersion >= 0x30303235):
 		bs.readBytes(0x10)
 
@@ -660,8 +663,10 @@ def parseNUNOSection0303(chunkVersion, bs):
 
 	# reading the unknown sections data
 	bs.readBytes(48 * unknownSectionCount)
-	bs.readBytes(4 * unknown1)
-	bs.readBytes(8 * unknown2)
+	bs.readBytes(4 * skip1)
+	bs.readBytes(8 * skip2)
+	bs.readBytes(12 * skip3)
+	
 
 	NUNO0303StructList.append(nunotype0303)
 
@@ -694,12 +699,13 @@ def parseNUNO(chunkVersion, bs):
 def parseNUNVSection0501(chunkVersion, bs):
 	nunvtype0501 = NUNOType0303Struct()  # same struct
 	nunvtype0501.name = "nunv"
-	bs.read('i')
+	a = bs.readUShort()
+	b = bs.readUShort()
+	nunvtype0501.parentBoneID = a if endian == NOE_LITTLEENDIAN else b		
 	controlPointCount = bs.readUInt()
 	unknownSectionCount = bs.readUInt()
-	unknown1 = bs.readInt()
-	nunvtype0501.parentBoneID = bs.readInt()
-	bs.readBytes(0x50)
+	skip1 = bs.readInt()
+	bs.readBytes(0x54)
 	if (chunkVersion >= 0x30303131):
 		bs.readBytes(0x10)
 
@@ -718,7 +724,7 @@ def parseNUNVSection0501(chunkVersion, bs):
 
 	# reading the unknown sections data
 	bs.readBytes(48 * unknownSectionCount)
-	bs.readBytes(4 * unknown1)
+	bs.readBytes(4 * skip1)
 
 	NUNV0303StructList.append(nunvtype0501)
 
@@ -1487,6 +1493,7 @@ def LoadModel(data, mdlList):
 	global KeepDrawing
 	global endian
 	global morphMap
+	global nunvOffset
 	global G1MGM_MATERIAL_KEYS
 	debug = False
 	g1tData = None
@@ -1685,10 +1692,10 @@ def LoadModel(data, mdlList):
 	# =================================================================
 	if (bComputeCloth or noesis.optWasInvoked("-g1mcloth")):
 		NUNProps = []
-		nunoOffset = 0
+		nunvOffset = 0
 		clothMap = []
 		if (len(NUNO0303StructList) != 0):
-			nunoOffset = len(NUNO0303StructList)
+			nunvOffset = len(NUNO0303StructList)
 		if (len(NUNO0303StructList) != 0):
 			for nuno0303 in NUNO0303StructList:
 				NUNProps.append(nuno0303)
@@ -1697,7 +1704,7 @@ def LoadModel(data, mdlList):
 				NUNProps.append(nunv0303)
 		for prop in NUNProps:
 			boneStart = len(boneList)
-			parentBone = g1m.boneMapList[prop.parentBoneID - 1][0]
+			parentBone = boneIDList[prop.parentBoneID]
 			nunoMap = {}
 			driverMesh = Mesh()
 			driverMesh.vertCount = 0
@@ -2196,7 +2203,15 @@ def LoadModel(data, mdlList):
 				if(mesh.Has8Weights):
 					mesh.oldSkinIndiceList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
 					mesh.skinIndiceList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
-					mesh.skinWeightList2 = [[1, 0, 0, 0] for n in range(mesh.vertCount)]		
+					mesh.skinWeightList2 = [[1, 0, 0, 0] for n in range(mesh.vertCount)]
+		if (mesh.Has8Weights and len(mesh.skinWeightList2) == 0):
+			print("WRONG WEIGHTS EXPECTED ! NEEDS FIXING")
+			if len(mesh.oldSkinIndiceList2) > 0:				
+				mesh.skinWeightList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
+			else:
+				mesh.oldSkinIndiceList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
+				mesh.skinIndiceList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
+				mesh.skinWeightList2 = [[0, 0, 0, 0] for n in range(mesh.vertCount)]
 				
 		indiceBuffer = g1m.indiceBufferList[info[7]]
 		bs.seek(indiceBuffer.offset + info[12] * indiceBuffer.strideSize)
@@ -2229,7 +2244,10 @@ def LoadModel(data, mdlList):
 			submeshesIndex.append(index)
 			isClothType1List[index] = lod.ID & 0xF == 1
 			isClothType2List[index] = lod.ID & 0xF == 2
-			ID2s[index] = lod.ID2 & 0xF
+			if lod.ID2 >= 10000 and lod.ID2 < 20000:
+				ID2s[index] = (lod.ID2 & 0xF) + nunvOffset
+			else:				
+				ID2s[index] = lod.ID2 & 0xF
 	submeshesIndex = list(set(submeshesIndex))
 	KeepDrawing = True
 	currentMesh = 0
