@@ -1,6 +1,6 @@
 from inc_noesis import *
 import os
-from math import sqrt, sin, cos
+from math import sqrt, sin, cos, floor
 # import rpdb
 # debugger = rpdb.Rpdb()
 # debugger.set_trace()
@@ -10,22 +10,23 @@ from math import sqrt, sin, cos
 # =================================================================
 
 #misc
-bLog = True				# Display log, with some progress info 
+bLog = True					# Display log, with some progress info 
 
 #cloth options
-bComputeCloth = True	# Compute cloth data and physics' drivers + fix cloth meshes using the NUNO/NUNV sections
-bDisplayCloth = True	# Discard cloth meshes or not, you may want to put it to false if cloth get in the way during animations since they won't move as they are supposed to be animated by the physics' engine at runtime
-bDisplayDrivers = True	# Discard cloth drivers and physics' bones or not
+bComputeCloth = True		# Compute cloth data and physics' drivers + fix cloth meshes using the NUNO/NUNV sections
+bDisplayCloth = True		# Discard cloth meshes or not, you may want to put it to false if cloth get in the way during animations since they won't move as they are supposed to be animated by the physics' engine at runtime
+bDisplayDrivers = True		# Discard cloth drivers and physics' bones or not
 
 #paired files options
-bLoadG1T = True			# Allow to choose a paired .g1t file
+bLoadG1T = True				# Allow to choose a paired .g1t file
 bLoadG1MS = True			# Allow to choose a paired .g1m skeleton file. Only choose this option if the skeleton is in a separate g1m
 bLoadG1MOid = False			# Allow to choose a paired Oid.bin skeleton bone names file.
 bAutoLoadG1MS = False		# Load the first g1m in the same folder as skeleton
 bLoadG1AG2A = False	 		# Allow to choose a paired .g1a/.g2a file
 bLoadG1AG2AFolder = True	# Allow to choose a folder, all .g1a/.g2a files in this folder will be loaded
-bLoadG1H = False			#Allow to choose a paired .g1h file
-G1HOffset = 20				#Offset between different morph targets
+bLoadG1H = False			# Allow to choose a paired .g1h file
+G1HOffset = 20				# Offset between different morph targets
+
 # =================================================================
 # Miscenalleous
 # =================================================================
@@ -42,9 +43,6 @@ def registerNoesisTypes():
 	handle = noesis.register("Koei Tecmo KTGL Model", ".g1m")
 	noesis.setHandlerTypeCheck(handle, CheckModelType)
 	noesis.setHandlerLoadModel(handle, LoadModel)
-	handle = noesis.register("Koei Tecmo KTGL Screen Layout Texture", ".kslt")
-	noesis.setHandlerTypeCheck(handle, CheckScreenLayoutTextureType)
-	noesis.setHandlerLoadRGBA(handle, LoadScreenLayoutTexture)
 	noesis.addOption(handle, "-g1mskeleton", "Override G1MS section from another file", noesis.OPTFLAG_WANTARG)
 	noesis.addOption(handle, "-g1mautoskeleton", "Override G1MS section from another file", noesis.OPTFLAG_WANTARG)
 	noesis.addOption(handle, "-g1mskeletonoid", "Read skeleton bone names from another file", noesis.OPTFLAG_WANTARG)
@@ -53,7 +51,13 @@ def registerNoesisTypes():
 	noesis.addOption(handle, "-g1manimationdir", "Load Specified Animations from directories", noesis.OPTFLAG_WANTARG)
 	noesis.addOption(handle, "-g1mmorph", "Load morph targets from file", noesis.OPTFLAG_WANTARG)
 	noesis.addOption(handle, "-g1mcloth", "Compute Cloth Data", 0)
-	noesis.addOption(handle, "-g1mdriver", "Compute Driver Data", 0)		
+	noesis.addOption(handle, "-g1mdriver", "Compute Driver Data", 0)
+	handle = noesis.register("Koei Tecmo KTGL Screen Layout Texture", ".kslt")
+	noesis.setHandlerTypeCheck(handle, CheckScreenLayoutTextureType)
+	noesis.setHandlerLoadRGBA(handle, LoadScreenLayoutTexture)
+	handle = noesis.register("Koei Tecmo Height Map", ".khm")
+	noesis.setHandlerTypeCheck(handle, CheckHeightMapType)
+	noesis.setHandlerLoadRGBA(handle, LoadHeightMapTexture)
 	if (bLog):
 		noesis.logPopup()
 	return 1
@@ -64,6 +68,8 @@ HEADER_G1T_BE = 0x47543147
 HEADER_G1T_LE = 0x47315447
 HEADER_KSLT_BE = 0x544C534B
 HEADER_KSLT_LE = 0x4B534C54
+HEADER_KHM_BE = 0x5F4D484B
+HEADER_KHM_LE = 0x4B484D5F
 
 # =================================================================
 # Noesis check type
@@ -101,6 +107,18 @@ def CheckScreenLayoutTextureType(data):
 	bs.seek(0, NOESEEK_ABS)
 	id = bs.readInt()
 	if id not in [HEADER_KSLT_LE,HEADER_KSLT_BE]:
+		print("Header not recognized")
+		return 0
+	return 1
+
+def CheckHeightMapType(data):
+	bs = NoeBitStream(data)
+	if len(data) < 0x20:
+		print("Invalid KHM file, too small")
+		return 0
+	bs.seek(0, NOESEEK_ABS)
+	id = bs.readInt()
+	if id not in [HEADER_KHM_LE,HEADER_KHM_BE]:
 		print("Header not recognized")
 		return 0
 	return 1
@@ -413,7 +431,7 @@ def processChunkType9(bs):
 def parseG1MS(currentPosition, bs, isDefault = True):
 	jointDataOffset = bs.readUInt()
 	conditionNumber = bs.readUShort()
-	if isDefault and conditionNumber == 0:
+	if isDefault: # and conditionNumber == 0: (seemed to work on most models but found out that broke some of them)
 		print("Skeleton layering detected...");
 		if g1sData is not None: # Skeleton Layer
 			bs2 = NoeBitStream(g1sData)
@@ -797,7 +815,7 @@ def processG1T(bs):
 			format = "r8 g8 b8 a8"	
 		elif (textureFormat == 0x1):
 			computedSize = width * height * 4
-			format = "r8 g8 b8 a8"	
+			format = "b8 g8 r8 a8"	
 		elif (textureFormat == 0x2):
 			format = noesis.NOESISTEX_DXT1
 		elif (textureFormat == 0x3):
@@ -808,6 +826,10 @@ def processG1T(bs):
 			format = noesis.NOESISTEX_DXT3
 		elif (textureFormat == 0x8):
 			format = noesis.NOESISTEX_DXT5
+		elif (textureFormat == 0x9 or textureFormat == 0xA):
+			computedSize = width * height * 4
+			format = "b8 g8 r8 a8"
+			mortonWidth = 0x20
 		elif (textureFormat == 0xF):
 			computedSize = width * height 
 			format = "a8"			
@@ -1027,6 +1049,32 @@ def processKSLT(bs):
 		texture = NoeTexture(textureName + '.dds', width, height, textureData, format)
 		textureList.append(texture)
 	return 1
+
+# =================================================================
+# KHM Height Map Texture
+# =================================================================
+
+def processKHM(bs):
+	if bLog:
+		noesis.logPopup()
+	magic = bs.read('<i')[0]
+	if magic == HEADER_KHM_BE:
+		endiankslt = NOE_BIGENDIAN
+	elif magic == HEADER_KHM_LE:
+		endiankslt = NOE_LITTLEENDIAN
+	bs.setEndian(endiankslt)
+	bs.read('2i')
+	size = bs.readUInt()
+	width = bs.readUShort() + 1
+	height = bs.readUShort() + 1
+	floorlevel = bs.readFloat()
+	midlevel = bs.readFloat()
+	ceilinglevel = bs.readFloat()
+	buffer = [[floor(255 * (bs.readUInt() / 0xFFFFFFFF))] * 3 for j in range(width * height)]
+	buffer = bytes([y for x in buffer for y in x])
+	buffer = rapi.imageDecodeRaw(buffer, width, height, "r8g8b8")
+	print("Loaded Heightmap; Size %X (%dx%d)" % (size, width, height))
+	return NoeTexture('dummy.dds', width, height, buffer, noesis.NOESISTEX_RGBA32)
 
 # =================================================================
 # G1H Morph Targets 
@@ -1467,6 +1515,15 @@ def LoadScreenLayoutTexture(data, texList):
 	processKSLT(ksltBs)
 	for tex in textureList:
 		texList.append(tex)
+	return 1
+
+# =================================================================
+# Noesis load height map texture
+# =================================================================
+
+def LoadHeightMapTexture(data, texList):
+	khmBs = NoeBitStream(data)
+	texList.append(processKHM(khmBs))
 	return 1
 
 # =================================================================
