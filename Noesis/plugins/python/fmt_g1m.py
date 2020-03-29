@@ -5,6 +5,8 @@ from math import sqrt, sin, cos, floor
 # debugger = rpdb.Rpdb()
 # debugger.set_trace()
 
+#Version 1.0.1
+
 # =================================================================
 # Plugin Options, a few of them are exposed as commands (see below)
 # =================================================================
@@ -35,6 +37,11 @@ def Align(bs, n):
 	value = bs.tell() % n
 	if (value):
 		bs.seek(n - value, 1)
+		
+def Reverse_Align(bs,n):
+	value = bs.tell() % n
+	if value:
+		bs.seek(-value,1)
 
 def registerNoesisTypes():
 	handle = noesis.register("Koei Tecmo KTGL Texture",".g1t")
@@ -1386,7 +1393,6 @@ def processG2A(bs, animCount, animName, endian):
 				globalOffset+=1
 			lastId = boneID
 			boneID += globalOffset * (256 if bIsNewVersion else 1024)
-			boneTimingDataOffset -= globalOffset
 		else:
 			packedInfo = bs.readUInt()
 			splineTypeCount = packedInfo >> 28
@@ -1396,6 +1402,7 @@ def processG2A(bs, animCount, animName, endian):
 				globalOffset+=1
 			lastId = boneID		
 		bs.seek(tempPos + boneInfoSectionSize + boneTimingDataOffset)
+		Reverse_Align(bs,4)
 	
 		rotNoeKeyFramedValues = []
 		posNoeKeyFramedValues = []
@@ -1411,6 +1418,20 @@ def processG2A(bs, animCount, animName, endian):
 			quantizedData = []
 			for k in range(keyFrameCount):
 				quantizedData.append([bs.readInt64() for j in range(4)])
+			if(keyFrameCount == 1):
+				if (opcode == 0):
+					temp1 = function1(quantizedData[0], 0, 1)
+					temp2 = function2(temp1)
+					rotationKeyframedValue = NoeKeyFramedValue(1,NoeQuat(temp2).transpose())
+					rotNoeKeyFramedValues.append(rotationKeyframedValue)
+				elif (opcode == 1):
+					temp1 = function1(quantizedData[0], 0, 1)
+					positionKeyFramedValue = NoeKeyFramedValue(1, NoeVec3(temp1))
+					posNoeKeyFramedValues.append(positionKeyFramedValue)
+				elif (opcode == 2):
+					temp1 = function1(quantizedData[0], 0, 1)
+					scaleKeyFramedValue = NoeKeyFramedValue(1, NoeVec3(temp1))
+					scaleNoeKeyFramedValues.append(scaleKeyFramedValue)
 			for k in range(keyFrameCount - 1):
 				if (opcode == 0):
 					keyframe1, keyframe2 = keyFrameTimings[k], keyFrameTimings[k + 1]
