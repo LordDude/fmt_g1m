@@ -5,7 +5,7 @@ from math import sqrt, sin, cos, floor
 # debugger = rpdb.Rpdb()
 # debugger.set_trace()
 
-#Version 1.3.0
+#Version 1.3.5
 
 # =================================================================
 # Plugin Options, a few of them are exposed as commands (see below)
@@ -511,11 +511,11 @@ def parseG1MS(currentPosition, bs, isDefault = True):
 			boneMatrixTransform = NoeQuat(quaternionRotation).toMat43().inverse()
 			boneMatrixTransform[3] = NoeVec3(position)
 			if parentID < 0:
-				bone = NoeBone(i + externalOffsetList, 'Clothbone_' + str(boneToBoneID[i]), boneMatrixTransform, None, parentID & 0xFFFF)
+				bone = NoeBone(i + externalOffsetList, 'Clothbone_' + str(i), boneMatrixTransform, None, parentID & 0xFFFF)
 				bone.setMatrix(bone.getMatrix() * boneList[parentID & 0xFFFF].getMatrix())
 				boneList.append(bone)
 			else:
-				bone = NoeBone(i + externalOffsetList, 'Clothbone_' + str(boneToBoneID[i]), boneMatrixTransform, None, parentID + externalOffsetList)
+				bone = NoeBone(i + externalOffsetList, 'Clothbone_' + str(i), boneMatrixTransform, None, parentID + externalOffsetList)
 				bone.setMatrix(bone.getMatrix() * boneList[parentID +externalOffsetList].getMatrix())
 				boneList.append(bone)
 		print("Skeleton parsed")			
@@ -1027,7 +1027,7 @@ def processG1T(bs):
 			mortonWidth = 8
 		elif (textureFormat == 0x63):
 			format = noesis.FOURCC_BC4
-			mortonWidth = 8
+			mortonWidth = 4
 			bNormalized = False
 		elif (textureFormat == 0x64):
 			format = noesis.FOURCC_BC5
@@ -1668,11 +1668,11 @@ def processG1A(bs, animCount, animName, endian):
 		if (boneID < len(boneIDList)):
 			actionBone = NoeKeyFramedBone(boneIDList[boneID])
 			if (len(rotNoeKeyFramedValues) > 0):
-				actionBone.setRotation(rotNoeKeyFramedValues, noesis.NOEKF_ROTATION_QUATERNION_4,noesis.NOEKF_INTERPOLATE_NEAREST)
+				actionBone.setRotation(rotNoeKeyFramedValues, noesis.NOEKF_ROTATION_QUATERNION_4)
 			if (len(posNoeKeyFramedValues) > 0):
-				actionBone.setTranslation(posNoeKeyFramedValues, noesis.NOEKF_TRANSLATION_VECTOR_3,noesis.NOEKF_INTERPOLATE_NEAREST)
+				actionBone.setTranslation(posNoeKeyFramedValues, noesis.NOEKF_TRANSLATION_VECTOR_3)
 			if (len(scaleNoeKeyFramedValues) > 0):
-				actionBone.setScale(scaleNoeKeyFramedValues, noesis.NOEKF_SCALE_VECTOR_3,noesis.NOEKF_INTERPOLATE_NEAREST)
+				actionBone.setScale(scaleNoeKeyFramedValues, noesis.NOEKF_SCALE_VECTOR_3)
 			keyFramedBoneList.append(actionBone)
 		else:
 			bCompatible = False
@@ -2528,9 +2528,9 @@ def LoadModel(data, mdlList):
 			isClothType1List[index] = lod.clothID == 1 
 			isClothType2List[index] = lod.clothID == 2
 			if lod.NUNID >= 10000 and lod.NUNID < 20000:
-				ID2s[index] = (lod.NUNID & 0xF) + nunvOffset
+				ID2s[index] = (lod.NUNID % 10000) + nunvOffset
 			else:				
-				ID2s[index] = lod.NUNID & 0xF
+				ID2s[index] = lod.NUNID % 10000
 	submeshesIndex = list(set(submeshesIndex))
 	KeepDrawing = True
 	currentMesh = 0
@@ -2676,7 +2676,7 @@ def LoadModel(data, mdlList):
 					finalColorBuffer+=noePack(endianC + 'f',vertex[k])
 		
 		# Weights
-		if (len(boneList) > 0):
+		if (len(boneList) > 0) and len(mesh.skinIndiceList) > 0:
 			for v in range(mesh.vertCount):
 				vertex = mesh.skinWeightList[v]
 				for k in range(4):
@@ -2686,7 +2686,7 @@ def LoadModel(data, mdlList):
 					for k in range(4):
 						finalWeightList += noePack(endianC + 'f', vertex[k])
 		# Bone indices
-		if (len(boneList) > 0):
+		if (len(boneList) > 0) and len(mesh.skinIndiceList) > 0:
 			for v in range(mesh.vertCount):
 				vertex = mesh.skinIndiceList[v]
 				for k in range(4):
@@ -2710,7 +2710,7 @@ def LoadModel(data, mdlList):
 		if len(mesh.vertUV2Buff) > 0:
 			rapi.rpgBindUVXBuffer(finalVertexUV2Buffer, noesis.RPGEODATA_FLOAT, 8, 2, mesh.vertCount)
 			
-		if (len(boneList) > 0):
+		if (len(boneList) > 0) and len(mesh.skinIndiceList) > 0:
 			rapi.rpgBindBoneIndexBuffer(finalIndiceList, noesis.RPGEODATA_USHORT,16 if mesh.Has8Weights else 8, 8 if mesh.Has8Weights else 4)
 			rapi.rpgBindBoneWeightBuffer(finalWeightList, noesis.RPGEODATA_FLOAT, 32 if mesh.Has8Weights else 16, 8 if mesh.Has8Weights else 4)
 
